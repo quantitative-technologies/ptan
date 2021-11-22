@@ -154,6 +154,42 @@ def _group_list(items, lens):
     return res
 
 
+# those entries are emitted from ExperienceSourceEpisode. Reward is discounted over the episode.
+ExperienceEpisode = collections.namedtuple('ExperienceEpisode', ('state', 'action', 'reward', 'done'))
+
+
+class ExperienceSourceEpisode(ExperienceSource):
+    """
+    This is a wrapper around ExperienceSource, which at each iteration emits the entire episode,
+    with the rewards discounted over the episode.
+
+    Multiple environments are not yet implemented.
+    """
+    def __init__(self, env, agent, gamma=1.0, steps_delta=1, vectorized=False):
+        assert isinstance(gamma, float)
+        super().__init__(env, agent, steps_delta=steps_delta, vectorized=vectorized)
+        self.gamma = gamma
+
+    def _get_episode(self):
+        discount_factor = 1.0
+        for exp in super().__iter__():
+            elem = exp[0]
+            self.episode_rewards += elem.reward
+            reward = elem.reward * discount_factor
+            discount_factor *= self.gamma
+            yield ExperienceEpisode(state=elem.state, action=elem.action, reward=reward, done=elem.done)
+            if elem.done:
+                break
+
+    def __iter__(self):
+        while True:
+            self.episode_rewards = 0.0
+            episode = tuple(self._get_episode())
+            self.total_rewards.append(self.episode_rewards)
+            self.total_steps.append(len(episode))
+            yield episode
+
+
 # those entries are emitted from ExperienceSourceFirstLast. Reward is discounted over the trajectory piece
 ExperienceFirstLast = collections.namedtuple('ExperienceFirstLast', ('state', 'action', 'reward', 'last_state'))
 
