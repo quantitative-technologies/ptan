@@ -169,25 +169,37 @@ class ExperienceSourceEpisode(ExperienceSource):
         assert isinstance(gamma, float)
         super().__init__(env, agent, steps_delta=steps_delta, vectorized=vectorized)
         self.gamma = gamma
+        self._buffer = deque()
 
     def _get_episode(self):
         discount_factor = 1.0
+        buffer = deque()
         for exp in super().__iter__():
             elem = exp[0]
-            self.episode_rewards += elem.reward
+            self._episode_rewards += elem.reward
             reward = elem.reward * discount_factor
             discount_factor *= self.gamma
-            yield ExperienceEpisode(state=elem.state, action=elem.action, reward=reward, done=elem.done)
+            buffer.append(ExperienceEpisode(state=elem.state, action=elem.action, reward=reward, done=elem.done))
             if elem.done:
                 break
 
+        discounted_rewards = 0.0
+        for elem in reversed(buffer):
+            discounted_rewards += elem.reward
+            self._buffer.appendleft(ExperienceEpisode(state=elem.state, action=elem.action, reward=discounted_rewards, done=elem.done))
+
+
     def __iter__(self):
         while True:
-            self.episode_rewards = 0.0
-            episode = tuple(self._get_episode())
-            self.total_rewards.append(self.episode_rewards)
-            self.total_steps.append(len(episode))
-            yield episode
+            self._episode_rewards = 0.0
+            self._get_episode()
+            episode_length = len(self._buffer)
+
+            for elem in self._buffer:
+                yield elem
+
+            self.total_rewards.append(self._episode_rewards)
+            self.total_steps.append(episode_length)
 
 
 # those entries are emitted from ExperienceSourceFirstLast. Reward is discounted over the trajectory piece
