@@ -174,6 +174,7 @@ class ExperienceSourceEpisode(ExperienceSource):
     def _get_episode(self):
         discount_factor = 1.0
         buffer = deque()
+        self._buffer.clear()
         for exp in super().__iter__():
             elem = exp[0]
             self._episode_rewards += elem.reward
