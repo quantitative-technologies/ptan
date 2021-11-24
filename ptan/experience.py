@@ -164,8 +164,11 @@ class ExperienceSourceEpisode(ExperienceSource):
     with the rewards discounted over the episode.
 
     Multiple environments are not yet implemented.
+
+    :param use_factor: (bool) Whether to use the gamma^t factor in the calculation of the discounted rewards, 
+        i.e. in the q-value.
     """
-    def __init__(self, env, agent, gamma=1.0, steps_delta=1, vectorized=False):
+    def __init__(self, env, agent, gamma=1.0, use_factor=True, steps_delta=1, vectorized=False):
         assert isinstance(gamma, float)
         super().__init__(env, agent, steps_delta=steps_delta, vectorized=vectorized)
         self.gamma = gamma
@@ -178,14 +181,13 @@ class ExperienceSourceEpisode(ExperienceSource):
         for exp in super().__iter__():
             elem = exp[0]
             self._episode_rewards += elem.reward
-            reward = elem.reward * discount_factor
-            discount_factor *= self.gamma
-            buffer.append(ExperienceEpisode(state=elem.state, action=elem.action, reward=reward, done=elem.done))
+            buffer.append(elem)
             if elem.done:
                 break
 
         discounted_rewards = 0.0
         for elem in reversed(buffer):
+            discounted_rewards *= self.gamma
             discounted_rewards += elem.reward
             self._buffer.appendleft(ExperienceEpisode(state=elem.state, action=elem.action, reward=discounted_rewards, done=elem.done))
 
