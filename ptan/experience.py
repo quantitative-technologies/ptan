@@ -161,7 +161,8 @@ ExperienceEpisode = collections.namedtuple('ExperienceEpisode', ('state', 'actio
 class ExperienceSourceEpisode(ExperienceSource):
     """
     This is a wrapper around ExperienceSource, which at each iteration emits the entire episode,
-    with the rewards discounted over the episode.
+    with the rewards discounted over the episode. This corresponds to the REINFORCE method, as presented
+    in Barto--Sutton, Section 13.3.
 
     Multiple environments are not yet implemented.
 
@@ -172,10 +173,10 @@ class ExperienceSourceEpisode(ExperienceSource):
         assert isinstance(gamma, float)
         super().__init__(env, agent, steps_delta=steps_delta, vectorized=vectorized)
         self.gamma = gamma
+        self.use_factor = use_factor
         self._buffer = deque()
 
     def _get_episode(self):
-        discount_factor = 1.0
         buffer = deque()
         self._buffer.clear()
         for exp in super().__iter__():
@@ -191,14 +192,17 @@ class ExperienceSourceEpisode(ExperienceSource):
             discounted_rewards += elem.reward
             self._buffer.appendleft(ExperienceEpisode(state=elem.state, action=elem.action, reward=discounted_rewards, done=elem.done))
 
-
     def __iter__(self):
         while True:
             self._episode_rewards = 0.0
             self._get_episode()
             episode_length = len(self._buffer)
 
+            factor = 1.0
             for elem in self._buffer:
+                if self.use_factor:
+                    yield ExperienceEpisode(state=elem.state, action=elem.action, reward=elem.reward * factor, done=elem.done)
+                    factor *= self.gamma
                 yield elem
 
             self.total_rewards.append(self._episode_rewards)
