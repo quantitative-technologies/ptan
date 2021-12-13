@@ -203,7 +203,8 @@ class ExperienceSourceEpisode(ExperienceSource):
                 if self.use_factor:
                     yield ExperienceEpisode(state=elem.state, action=elem.action, reward=elem.reward * factor, done=elem.done)
                     factor *= self.gamma
-                yield elem
+                else:
+                    yield elem
 
             self.total_rewards.append(self._episode_rewards)
             self.total_steps.append(episode_length)
