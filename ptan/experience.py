@@ -164,7 +164,7 @@ class ExperienceSourceEpisode(ExperienceSource):
     with the rewards discounted over the episode. This corresponds to the REINFORCE method, as presented
     in Barto--Sutton, Section 13.3.
 
-    Multiple environments are not yet implemented.
+    Multiple environments are not yet implemented <- Actually, should work automatically (double-check)
 
     :param use_factor: (bool) Whether to use the gamma^t factor in the calculation of the discounted rewards, 
         i.e. in the q-value.
