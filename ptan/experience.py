@@ -1,4 +1,5 @@
 import gym
+import stable_baselines3
 import torch
 import random
 import collections
@@ -30,7 +31,7 @@ class ExperienceSource:
         :param steps_delta: how many steps to do between experience items
         :param vectorized: support of vectorized envs from OpenAI universe
         """
-        assert isinstance(env, (gym.Env, list, tuple))
+        assert isinstance(env, (gym.Env, stable_baselines3.common.vec_env.VecEnv, list, tuple))
         assert isinstance(agent, BaseAgent)
         assert isinstance(steps_count, int)
         assert steps_count >= 1
