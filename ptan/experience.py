@@ -1,3 +1,4 @@
+from typing import OrderedDict
 import gym
 import stable_baselines3
 import torch
@@ -29,7 +30,7 @@ class ExperienceSource:
         :param agent: callable to convert batch of states into actions to take
         :param steps_count: count of steps to track for every experience chain
         :param steps_delta: how many steps to do between experience items
-        :param vectorized: support of vectorized envs from OpenAI universe
+        :param vectorized: support of vectorized envs using the stable-baselines3 API
         """
         assert isinstance(env, (gym.Env, stable_baselines3.common.vec_env.VecEnv, list, tuple))
         assert isinstance(agent, BaseAgent)
@@ -46,20 +47,49 @@ class ExperienceSource:
         self.total_rewards = []
         self.total_steps = []
         self.vectorized = vectorized
+        self.keys = self.pool[0].keys if vectorized else None  # keys should always be the same for each env
+        self.keys = None if self.keys == [None] else self.keys
+
+    def _concatenate(self, env, states, obs):
+        if self.vectorized:
+            obs_len = env.num_envs
+            if self.keys is None:
+                states.extend(obs)
+            else:
+                for k in self.keys:
+                    states[k] = obs[k] if states[k] is None else np.concatenate((states[k], obs[k]))
+        else:
+            obs_len = 1
+            states.append(obs)
+
+        return obs_len
+
+    def _idx(self, states, idx):
+        if not self.vectorized or self.keys is None:
+            return states[idx]
+        return tuple(states[k][idx] for k in self.keys)
 
     def __iter__(self):
-        states, agent_states, histories, cur_rewards, cur_steps = [], [], [], [], []
+        agent_states, histories, cur_rewards, cur_steps = [], [], [], []
+        states = OrderedDict([(k, None) for k in self.keys]) if self.vectorized and self.keys is not None else []
         env_lens = []
         for env in self.pool:
             obs = env.reset()
             # if the environment is vectorized, all it's output is lists of results.
             # Details are here: https://github.com/openai/universe/blob/master/doc/env_semantics.rst
-            if self.vectorized:
-                obs_len = len(obs)
-                states.extend(obs)
-            else:
-                obs_len = 1
-                states.append(obs)
+            # Moreover, this implementation is compatible with the stable-baselines3 API.
+            # See: https://stable-baselines3.readthedocs.io/en/master/guide/vec_envs.html#vecenv
+            # if self.vectorized:
+            #     obs_len = env.num_envs
+            #     if self.keys is None:
+            #         states.extend(obs)
+            #     else:
+            #         for k in self.keys:
+            #             states[k] = obs[k] if states[k] is None else np.concatenate((states[k], obs[k]))
+            # else:
+            #     obs_len = 1
+            #     states.append(obs)
+            obs_len = self._concatenate(env, states, obs)
             env_lens.append(obs_len)
 
             for _ in range(obs_len):
@@ -70,21 +100,22 @@ class ExperienceSource:
 
         iter_idx = 0
         while True:
-            actions = [None] * len(states)
-            states_input = []
-            states_indices = []
-            for idx, state in enumerate(states):
-                if state is None:
-                    actions[idx] = self.pool[0].action_space.sample()  # assume that all envs are from the same family
-                else:
-                    states_input.append(state)
-                    states_indices.append(idx)
-            if states_input:
-                states_actions, new_agent_states = self.agent(states_input, agent_states)
-                for idx, action in enumerate(states_actions):
-                    g_idx = states_indices[idx]
-                    actions[g_idx] = action
-                    agent_states[g_idx] = new_agent_states[idx]
+            #actions = [None] * sum(env_lens)
+            actions, agent_states = self.agent(states, agent_states)
+            # states_input = []
+            # states_indices = []
+            # for idx, state in enumerate(states):
+            #     if state is None:
+            #         actions[idx] = self.pool[0].action_space.sample()  # assume that all envs are from the same family
+            #     else:
+            #         states_input.append(state)
+            #         states_indices.append(idx)
+            # if states_input:
+            #     states_actions, new_agent_states = self.agent(states_input, agent_states)
+            #     for idx, action in enumerate(states_actions):
+            #         g_idx = states_indices[idx]
+            #         actions[g_idx] = action
+            #         agent_states[g_idx] = new_agent_states[idx]
             grouped_actions = _group_list(actions, env_lens)
 
             global_ofs = 0
@@ -97,7 +128,8 @@ class ExperienceSource:
 
                 for ofs, (action, next_state, r, is_done) in enumerate(zip(action_n, next_state_n, r_n, is_done_n)):
                     idx = global_ofs + ofs
-                    state = states[idx]
+                    #state = states[idx]
+                    state = self._idx(states, idx)
                     history = histories[idx]
 
                     cur_rewards[idx] += r
@@ -106,7 +138,8 @@ class ExperienceSource:
                         history.append(Experience(state=state, action=action, reward=r, done=is_done))
                     if len(history) == self.steps_count and iter_idx % self.steps_delta == 0:
                         yield tuple(history)
-                    states[idx] = next_state
+                    if not self.vectorized:
+                        states[idx] = next_state
                     if is_done:
                         # in case of very short episode (shorter than our steps count), send gathered history
                         if 0 < len(history) < self.steps_count:
@@ -172,7 +205,7 @@ class ExperienceSourceEpisode(ExperienceSource):
     """
     def __init__(self, env, agent, gamma=1.0, use_factor=True, steps_delta=1, vectorized=False):
         assert isinstance(gamma, float)
-        super().__init__(env, agent, steps_delta=steps_delta, vectorized=vectorized)
+        super().__init__(env, agent, steps_count=1, steps_delta=steps_delta, vectorized=vectorized)
         self.gamma = gamma
         self.use_factor = use_factor
         self._buffer = deque()
