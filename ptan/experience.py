@@ -104,16 +104,16 @@ class ExperienceSource:
                     if state is not None:
                         history.append(Experience(state=state, action=action, reward=r, done=is_done))
                     if len(history) == self.steps_count and iter_idx % self.steps_delta == 0:
-                        yield tuple(history)
+                        yield tuple(history), env_idx
                     states[idx] = next_state
                     if is_done:
                         # in case of very short episode (shorter than our steps count), send gathered history
                         if 0 < len(history) < self.steps_count:
-                            yield tuple(history)
+                            yield tuple(history), env_idx
                         # generate tail of history
                         while len(history) > 1:
                             history.popleft()
-                            yield tuple(history)
+                            yield tuple(history), env_idx
                         self.total_rewards.append(cur_rewards[idx])
                         self.total_steps.append(cur_steps[idx])
                         cur_rewards[idx] = 0.0
@@ -171,15 +171,15 @@ class ExperienceSourceEpisode(ExperienceSource):
     """
     def __init__(self, env, agent, gamma=1.0, use_factor=True, steps_delta=1, vectorized=False):
         assert isinstance(gamma, float)
-        super().__init__(env, agent, steps_delta=steps_delta, vectorized=vectorized)
+        super().__init__(env, agent, steps_count=1, steps_delta=steps_delta, vectorized=vectorized)
         self.gamma = gamma
         self.use_factor = use_factor
-        self._buffer = deque()
+        self._buffer = [deque() for _ in range(len(self.pool))]
 
     def _get_episode(self):
         buffer = deque()
         self._buffer.clear()
-        for exp in super().__iter__():
+        for exp, env_idx in super().__iter__():
             elem = exp[0]
             self._episode_rewards += elem.reward
             buffer.append(elem)
