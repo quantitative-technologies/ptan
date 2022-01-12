@@ -176,38 +176,47 @@ class ExperienceSourceEpisode(ExperienceSource):
         self.use_factor = use_factor
         self._buffer = [deque() for _ in range(len(self.pool))]
 
-    def _get_episode(self):
-        buffer = deque()
-        self._buffer.clear()
+    def __iter__(self):
+        #buffer = deque()
+        #self._buffer.clear()
         for exp, env_idx in super().__iter__():
             elem = exp[0]
-            self._episode_rewards += elem.reward
-            buffer.append(elem)
+            #self._episode_rewards += elem.reward
+            #buffer.append(elem)
+            self._buffer[env_idx].append(ExperienceEpisode(state=elem.state, action=elem.action, reward=elem.reward, done=elem.done))
             if elem.done:
-                break
+                discounted_rewards = 0.0
+                result = deque()
+                for elem in reversed(self._buffer[env_idx]):
+                    discounted_rewards *= self.gamma
+                    discounted_rewards += elem.reward
+                    result.appendleft(ExperienceEpisode(state=elem.state, action=elem.action, reward=discounted_rewards, done=elem.done))
+                factor = 1.0
+                for elem in result:
+                    if self.use_factor:
+                        yield ExperienceEpisode(state=elem.state, action=elem.action, reward=elem.reward * factor, done=elem.done)
+                        factor *= self.gamma
+                    else:
+                        yield elem
+                self._buffer[env_idx].clear()
 
-        discounted_rewards = 0.0
-        for elem in reversed(buffer):
-            discounted_rewards *= self.gamma
-            discounted_rewards += elem.reward
-            self._buffer.appendleft(ExperienceEpisode(state=elem.state, action=elem.action, reward=discounted_rewards, done=elem.done))
+    # def __iter__(self):
+    #     while True:
+    #         self._get_episode()
+            # self._episode_rewards = 0.0
+            # self._get_episode()
+            # episode_length = len(self._buffer)
 
-    def __iter__(self):
-        while True:
-            self._episode_rewards = 0.0
-            self._get_episode()
-            episode_length = len(self._buffer)
+            # factor = 1.0
+            # for elem in self._buffer:
+            #     if self.use_factor:
+            #         yield ExperienceEpisode(state=elem.state, action=elem.action, reward=elem.reward * factor, done=elem.done)
+            #         factor *= self.gamma
+            #     else:
+            #         yield elem
 
-            factor = 1.0
-            for elem in self._buffer:
-                if self.use_factor:
-                    yield ExperienceEpisode(state=elem.state, action=elem.action, reward=elem.reward * factor, done=elem.done)
-                    factor *= self.gamma
-                else:
-                    yield elem
-
-            self.total_rewards.append(self._episode_rewards)
-            self.total_steps.append(episode_length)
+            # self.total_rewards.append(self._episode_rewards)
+            # self.total_steps.append(episode_length)
 
 
 # those entries are emitted from ExperienceSourceFirstLast. Reward is discounted over the trajectory piece
@@ -229,7 +238,7 @@ class ExperienceSourceFirstLast(ExperienceSource):
         self.steps = steps_count
 
     def __iter__(self):
-        for exp in super(ExperienceSourceFirstLast, self).__iter__():
+        for exp, env_idx in super(ExperienceSourceFirstLast, self).__iter__():
             if exp[-1].done and len(exp) <= self.steps:
                 last_state = None
                 elems = exp
