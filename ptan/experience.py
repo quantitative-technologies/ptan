@@ -163,7 +163,7 @@ class ExperienceSource:
                         cur_rewards[idx] = 0.0
                         cur_steps[idx] = 0
                         # vectorized envs are reset automatically
-                        if self.vectorized:
+                        if not self.vectorized:
                             self._set_state(states, idx, env.reset())
                         agent_states[idx] = self.agent.initial_state()
                         history.clear()
