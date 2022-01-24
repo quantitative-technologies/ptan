@@ -1,3 +1,4 @@
+from copy import deepcopy
 from typing import OrderedDict
 import gym
 import stable_baselines3
@@ -67,7 +68,8 @@ class ExperienceSource:
     def _get_state(self, states, idx):
         if not self.vectorized or self.keys is None:
             return states[idx]
-        return tuple(states[k][idx] for k in self.keys)
+        # deepcopy needed when states is an OrderedDict
+        return deepcopy(tuple(states[k][idx] for k in self.keys))
 
     def _set_state(self, states, idx, state):
         if not self.vectorized or self.keys is None:
