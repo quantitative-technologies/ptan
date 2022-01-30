@@ -15,7 +15,7 @@ from .agent import BaseAgent
 from .common import utils
 
 # one single experience step
-Experience = namedtuple('Experience', ['state', 'action', 'reward', 'done'])
+Experience = namedtuple('Experience', ['state', 'action', 'reward', 'done', 'info'])
 
 
 class ExperienceSource:
@@ -78,7 +78,7 @@ class ExperienceSource:
             states[k][idx] = state[k]
 
     def __iter__(self):
-        agent_states, histories, cur_rewards, cur_steps = [], [], [], []
+        agent_states, histories, episode_counts, cur_rewards, cur_steps = [], [], [], [], []
         states = OrderedDict([(k, None) for k in self.keys]) if self.vectorized and self.keys is not None else []
         env_lens = []
         for env in self.pool:
@@ -100,8 +100,9 @@ class ExperienceSource:
             obs_len = self._concatenate(env, states, obs)
             env_lens.append(obs_len)
 
-            for _ in range(obs_len):
+            for i in range(obs_len):
                 histories.append(deque(maxlen=self.steps_count))
+                episode_counts.append(i)
                 cur_rewards.append(0.0)
                 cur_steps.append(0)
                 agent_states.append(self.agent.initial_state())
@@ -144,13 +145,18 @@ class ExperienceSource:
                     cur_rewards[idx] += r
                     cur_steps[idx] += 1
                     if state is not None:
-                        history.append(Experience(state=state, action=action, reward=r, done=is_done))
+                        history.append(Experience(state=state, 
+                                                  action=action, 
+                                                  reward=r, 
+                                                  done=is_done, 
+                                                  info=dict(episode_idx=episode_counts[idx])))
                     if len(history) == self.steps_count and iter_idx % self.steps_delta == 0:
                         yield tuple(history)
                     self._set_state(states, idx, next_state)
                     # if not self.vectorized:
                     #     states[idx] = next_state
                     if is_done:
+                        episode_counts[idx] += env_lens[env_idx]
                         # in case of very short episode (shorter than our steps count), send gathered history
                         if 0 < len(history) < self.steps_count:
                             yield tuple(history), env_idx
@@ -265,7 +271,7 @@ class ExperienceSourceEpisode(ExperienceSource):
 
 
 # those entries are emitted from ExperienceSourceFirstLast. Reward is discounted over the trajectory piece
-ExperienceFirstLast = collections.namedtuple('ExperienceFirstLast', ('state', 'action', 'reward', 'last_state'))
+ExperienceFirstLast = collections.namedtuple('ExperienceFirstLast', ('state', 'action', 'reward', 'info', 'last_state'))
 
 
 class ExperienceSourceFirstLast(ExperienceSource):
@@ -295,7 +301,7 @@ class ExperienceSourceFirstLast(ExperienceSource):
                 total_reward *= self.gamma
                 total_reward += e.reward
             yield ExperienceFirstLast(state=exp[0].state, action=exp[0].action,
-                                      reward=total_reward, last_state=last_state)
+                                      reward=total_reward, info=exp[0].info, last_state=last_state)
 
 
 def discount_with_dones(rewards, dones, gamma):
