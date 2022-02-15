@@ -68,14 +68,17 @@ class ExperienceSource:
     def _get_state(self, states, idx):
         if not self.vectorized or self.keys is None:
             return states[idx]
+        # This requires different handling depending on the ObservationSpace
         # deepcopy needed when states is an OrderedDict
-        return deepcopy(tuple(states[k][idx] for k in self.keys))
+        return deepcopy({k: states[k][idx] for k in self.keys})
+        #return deepcopy(tuple(states[k][idx] for k in self.keys))
 
     def _set_state(self, states, idx, state):
         if not self.vectorized or self.keys is None:
             states[idx] = state
-        for k in self.keys:
-            states[k][idx] = state[k]
+        else:
+            for k in self.keys:
+                states[k][idx] = state[k]
 
     def __iter__(self):
         agent_states, histories, episode_counts, cur_rewards, cur_steps = [], [], [], [], []
@@ -151,7 +154,7 @@ class ExperienceSource:
                                                   done=is_done, 
                                                   info=dict(episode_idx=episode_counts[idx])))
                     if len(history) == self.steps_count and iter_idx % self.steps_delta == 0:
-                        yield tuple(history)
+                        yield tuple(history), env_idx
                     self._set_state(states, idx, next_state)
                     # if not self.vectorized:
                     #     states[idx] = next_state
