@@ -274,7 +274,7 @@ class ExperienceSourceEpisode(ExperienceSource):
 
 
 # those entries are emitted from ExperienceSourceFirstLast. Reward is discounted over the trajectory piece
-ExperienceFirstLast = collections.namedtuple('ExperienceFirstLast', ('state', 'action', 'reward', 'info', 'last_state'))
+ExperienceFirstLast = collections.namedtuple('ExperienceFirstLast', ('state', 'action', 'reward', 'done', 'info', 'last_state'))
 
 
 class ExperienceSourceFirstLast(ExperienceSource):
@@ -304,7 +304,7 @@ class ExperienceSourceFirstLast(ExperienceSource):
                 total_reward *= self.gamma
                 total_reward += e.reward
             yield ExperienceFirstLast(state=exp[0].state, action=exp[0].action,
-                                      reward=total_reward, info=exp[0].info, last_state=last_state)
+                                      reward=total_reward, done=exp[0].done, info=exp[0].info, last_state=last_state)
 
 
 def discount_with_dones(rewards, dones, gamma):
